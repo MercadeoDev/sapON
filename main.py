@@ -53,6 +53,9 @@ items_color = "#4BCD5E"
 text_color = "#292731"
 disabled_color = "#7C8483"
 
+""" items_color = "#FF4155"
+text_color = "#0A100D" """
+
 def main():
     ui()
 
@@ -71,7 +74,7 @@ def cargar_xlsx():
         selected_file = path
         files_loaded = True
 
-        archivo_msg = f">>{name}, el archivo seleccionado fue:\n→ {os.path.basename(path)}\n\n"
+        archivo_msg = f">>{name}, el archivo elegido fue:\n→ {os.path.basename(path)}\n\n"
         consola.configure(state="normal")         
         consola.insert("end", archivo_msg)     
         consola.see("end")
@@ -316,6 +319,34 @@ def validar_lll():
 
     #almacen de errores
     errores_lll = []
+    fila_inicial = 6
+
+    #validar columnas con arrays, validar que este in, que no sean vacío u error
+    def validacion_basica(columna:int, array_evaluativo):
+        
+        for idx in range(fila_inicial, len(df_CAT)):
+            valor = df_CAT.iat[idx, columna]
+            #celda vacía o NaN
+            if pd.isna(valor) or (isinstance(valor, str) and valor.strip() == ""):
+                blanks += 1
+                if blanks < 10:
+                    errores_lll.append({'fila': idx, 'col': columna})
+                else:
+                    break
+                continue
+            else:
+                blanks = 0
+
+            #error de Excel (#REF!, #N/A…)
+            if es_error_excel(valor):
+                errores_lll.append({'fila': idx, 'col': columna})
+                continue
+
+            #validación contra validos
+            v_str = str(valor).strip()
+            if v_str not in array_evaluativo:
+                errores_lll.append({'fila': idx, 'col': columna})
+
 
     #detector de errores nativos de excel
     def es_error_excel(v):
@@ -382,42 +413,26 @@ def validar_lll():
     pais_L5 = df_CAT.iloc[4,11]
     if str(pais_L5) != str(pais_seleccionado):
         messagebox.showerror("Disparidad en país", "El país seleccionado no corresponde al país del LLL cargado.")        
-
-    
-    #fila de inicio
-    fila_inicial = 6
-
+   
     #--------------------Validar Tipo de Venta
-    columna_tipo_venta = 0
-    #Obtener tipo de venta
     tipos_venta = set(params.get("tipo_venta"))
+    validacion_basica(0, tipos_venta)
 
+    #--------------------Validar Vehiculo
+    vehiculo = set(params.get("vehiculo"))
+    validacion_basica(1, vehiculo)
 
-    for idx in range(fila_inicial, len(df_CAT)):
-        valor = df_CAT.iat[idx, 0]
+    #--------------------Validar Estrategía
+    codi_estrategia = set(params.get("codigos_estrategia"))
+    validacion_basica(2, codi_estrategia)
 
-        #celda vacía o NaN
-        if pd.isna(valor) or (isinstance(valor, str) and valor.strip() == ""):
-            blanks += 1
-            if blanks < 10:
-                errores_lll.append({'fila': idx, 'col': columna_tipo_venta})
-            else:
-                break
-            continue
-        else:
-            blanks = 0
+    #--------------------Validar Tipo Programación
+    tipo_prog = set(params.get("tipo_prog"))
+    validacion_basica(12, tipo_prog)
 
-        #error de Excel (#REF!, #N/A…)
-        if es_error_excel(valor):
-            errores_lll.append({'fila': idx, 'col': columna_tipo_venta})
-            continue
-
-        #validación contra validos
-        v_str = str(valor).strip()
-        if v_str not in tipos_venta:
-            errores_lll.append({'fila': idx, 'col': columna_tipo_venta})
-
-
+    #--------------------Validar COLECCIÓN CAPSULA
+    tipo_prog = set(params.get("tipo_prog"))
+    validacion_basica(12, tipo_prog)
 
     print(errores_lll)
 
