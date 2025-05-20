@@ -74,7 +74,7 @@ def cargar_xlsx():
         selected_file = path
         files_loaded = True
 
-        archivo_msg = f">>{name}, el archivo elegido fue:\n→ {os.path.basename(path)}\n\n"
+        archivo_msg = f">>{name}, el archivo elegido\nfue:→ {os.path.basename(path)}\n\n"
         consola.configure(state="normal")         
         consola.insert("end", archivo_msg)     
         consola.see("end")
@@ -89,7 +89,7 @@ def ui():
     global consola, btn_evaluar_lll, files_loaded, pais, campana
 
     ventana = tk.Tk()
-    ventana.title("Fallometro - Verificador de Leader List Lite")
+    ventana.title("Fallometro - Verificador de LLL")
     ventana.geometry("550x450")
     ventana.configure(bg=background_color)
     ventana.attributes('-alpha', 0.98)
@@ -106,7 +106,7 @@ def ui():
     
     ventana.resizable(False, False)    
 
-    titulo = tk.Label(ventana, text="Fallometro — Verificador de errores en LLL", font=font_h1, bg=background_color, fg=text_color)
+    titulo = tk.Label(ventana, text="Fallometro — Verificador de Leader List Lite", font=font_h1, bg=background_color, fg=text_color)
     titulo.pack(pady=(15,0))
 
     #Establecer dos columnas
@@ -273,7 +273,7 @@ def ui():
     )
     consola.pack(pady=(16,0), padx=(0,20), fill="both", expand=True)  
 
-    bienvenida = f">>¡Hola {name}!\nTe doy la bienvenida Fallometro.\nPor favor, comienza cargando\nlos LLL a revisar...\n\n"
+    bienvenida = f">>¡Hola {name}!\nTe doy la bienvenida Fallometro\nPor favor, comienza cargando\nlos LLL a revisar...\n\n"
     consola.insert("0.0", bienvenida)
 
     consola.configure(state="disabled")
@@ -321,21 +321,75 @@ def validar_lll():
     errores_lll = []
     fila_inicial = 6
 
-    #validar columnas con arrays, validar que este in, que no sean vacío u error
+    #encontrar el final del LLL
+    def encontrar_fin_datos(df, fila_inicial):
+        #buscar la primera fila completamente vacía desde fila_inicial
+        for idx in range(fila_inicial, len(df)):
+            if df.iloc[idx].isna().all():
+                return idx  #devolver el indice de la ultima fila
+        return len(df) #si no lo encuentra devolver el len del df    
+
+    #validar igual a cero
+    def validar_cero(columna:int):
+        for idx in range(fila_inicial, fila_final):
+            valor = df_CAT.iat[idx, columna]
+            if valor == 0:
+                errores_lll.append({'fila': idx, 'col': columna})
+
+    #validar vacios o errores
+    def validar_vacios(columna:int):
+        for idx in range(fila_inicial, fila_final):
+            valor = df_CAT.iat[idx, columna]
+            # detección de vacío o error simple (#REF!, NaN, cadena vacía)
+            if pd.isna(valor) or (isinstance(valor, str) and (valor.strip() == "" or valor.startswith("#"))):
+                errores_lll.append({'fila': idx, 'col': columna})
+
+    #validar que sea numero
+    def validar_numerico(columna: int, es_entero: bool = False):
+        for idx in range(fila_inicial, fila_final):
+            valor = df_CAT.iat[idx, columna]
+
+            #saltar celdas vacías
+            if pd.isna(valor) or es_error_excel(valor):
+                continue
+
+            #intentar conversión
+            try:
+                if isinstance(valor, str):
+                    valor = valor.replace(',', '.')
+                    num = float(valor.strip())
+                else:
+                    num = float(valor)
+
+                #validar tipo numérico
+                if es_entero:
+                    if not num.is_integer():
+                        raise ValueError("No es entero")
+
+            except (ValueError, TypeError, AttributeError):
+                errores_lll.append({'fila': idx,'col': columna})
+
+    #valores repetidos en la misma columna
+    def validar_duplicados(columna:int):
+        valores_vistos = set() #almacen
+
+        for idx in range(fila_inicial, fila_final):
+            valor = df_CAT.iat[idx, columna]
+
+            # Verificar duplicados
+            if valor in valores_vistos:
+                errores_lll.append({'fila': idx, 'col': columna})
+            else:
+                valores_vistos.add(valor)
+
+    #validar columnas con arrays de params, validar que este in, que no sean vacío u error
     def validacion_basica(columna:int, array_evaluativo):
         
-        for idx in range(fila_inicial, len(df_CAT)):
+        for idx in range(fila_inicial, fila_final):
             valor = df_CAT.iat[idx, columna]
             #celda vacía o NaN
             if pd.isna(valor) or (isinstance(valor, str) and valor.strip() == ""):
-                blanks += 1
-                if blanks < 10:
-                    errores_lll.append({'fila': idx, 'col': columna})
-                else:
-                    break
-                continue
-            else:
-                blanks = 0
+                errores_lll.append({'fila': idx, 'col': columna})
 
             #error de Excel (#REF!, #N/A…)
             if es_error_excel(valor):
@@ -347,6 +401,32 @@ def validar_lll():
             if v_str not in array_evaluativo:
                 errores_lll.append({'fila': idx, 'col': columna})
 
+    def validar_rango_paginas(pagina_evaluada: int):
+        col_vehiculo = 1 
+        for idx in range(fila_inicial, fila_final):
+            vehiculo = df_CAT.iat[idx, col_vehiculo]
+            pagina = df_CAT.iat[idx, pagina_evaluada]
+
+            try:
+                #convertir int
+                num_pagina = int(pagina)
+
+                #filtrar rango del vehículo
+                rango_vehiculo = rango_paginas[rango_paginas['codi_vehi'] == vehiculo]
+
+                if rango_vehiculo.empty:
+                    errores_lll.append({'fila': idx, 'col': col_vehiculo})
+                else:
+                    #obtener límites
+                    pag_inicial = rango_vehiculo['PAG INICIAL'].values[0]
+                    pag_final = rango_vehiculo['PAG FINAL'].values[0]
+
+                    #validar rango
+                    if not (pag_inicial <= num_pagina <= pag_final):
+                        errores_lll.append({'fila': idx, 'col': pagina_evaluada})
+
+            except Exception as e:
+                errores_lll.append({'fila': idx, 'col': pagina_evaluada})
 
     #detector de errores nativos de excel
     def es_error_excel(v):
@@ -363,8 +443,21 @@ def validar_lll():
             raise ValueError("Formato de archivo no soportado") 
         return df
 
+    def consumir_conSQL(columna_inicial, columna_final, filas:int):
+        #toca asi porque no es capaz con la hoja completa
+        df_conSQL = pd.read_excel(selected_file,
+            sheet_name='Consultas SQL',
+            engine='pyxlsb',
+            header=1, #primera fila es header
+            usecols=f"{columna_inicial}:{columna_final}", nrows=int(filas)) #indicativo columnas
+        
+        df_conSQL = df_conSQL.dropna(how='all')
+        #print(df_conSQL)
+        return df_conSQL
+    
+
     consola.configure(state="normal")         
-    consola.insert("end", ">>Comenzado el análisis del LLL cargado...\n")     
+    consola.insert("end", ">>Comenzando análisis del LLL cargado...\n\n")     
     consola.see("end")
     consola.configure(state="disabled")      
 
@@ -374,12 +467,7 @@ def validar_lll():
                 
     #carga  
     try:
-        print("cargando archivo")
         df_CAT = leer_lll(selected_file, "LL CAT")
-        #Cargar esa hoja significa ralentizar significamente el programa, por eso se opta por parametros
-        #df_ConsultasSQL = leer_lll(selected_file, "Consultas SQL")
-        #print("Archivo cargado correctamente:", df_CAT.shape)
-        #print("Archivo cargado correctamente:", df_ConsultasSQL.shape)
     except Exception as e:
         messagebox.showerror("Error al leer archivo", f"El archivo cargado no corresponde a un LLL")
         consola.configure(state="normal")         
@@ -390,10 +478,12 @@ def validar_lll():
 
     #-----------------Validar que sea un LLL a través de las primeras 71 columnas
     columnas_lll = params.get("cols_LLL")
-    print(columnas_lll)
+    fila_final = encontrar_fin_datos(df_CAT, fila_inicial)
+
+    #print(columnas_lll)
     
     #Definición headers
-    print("Archivo cargado")
+    #print("Archivo cargado")
     headers = df_CAT.iloc[5].fillna("").tolist()
 
     #Si coinciden los headers significa que es un LLL
@@ -405,7 +495,6 @@ def validar_lll():
         messagebox.showerror("Error en la lectura", "El LLL seleccionado no tiene la estructura adecuada. Por favor, no modificar el formato original entregado por el Área de Precios y Optimización. Específicamente por Don Rodrigo")
 
     #----------------Validar que la campaña y el país sea igual
-    print("comparando país y campaña")
     campana_B5 = df_CAT.iloc[4,1]  
     if str(campana_B5) != str(campana_seleccionada):
         messagebox.showerror("Disparidad en campañas", "La campaña seleccionada no corresponde a la campaña del LLL cargado.")        
@@ -413,7 +502,12 @@ def validar_lll():
     pais_L5 = df_CAT.iloc[4,11]
     if str(pais_L5) != str(pais_seleccionado):
         messagebox.showerror("Disparidad en país", "El país seleccionado no corresponde al país del LLL cargado.")        
-   
+    
+    consola.configure(state="normal")         
+    consola.insert("end", f">>Analizando todos los datos\ningresados...\n\n")     
+    consola.see("end")
+    consola.configure(state="disabled") 
+
     #--------------------Validar Tipo de Venta
     tipos_venta = set(params.get("tipo_venta"))
     validacion_basica(0, tipos_venta)
@@ -431,10 +525,190 @@ def validar_lll():
     validacion_basica(12, tipo_prog)
 
     #--------------------Validar COLECCIÓN CAPSULA
-    tipo_prog = set(params.get("tipo_prog"))
-    validacion_basica(12, tipo_prog)
+    validar_vacios(13)
+
+    #--------------------Validar PAG NAL
+    rango_paginas = consumir_conSQL("A", "F", 40)
+    #print(rango_paginas)
+    validar_vacios(14)
+    validar_rango_paginas(14)
+
+    #--------------------Validar PAG NAL
+    validar_vacios(15)
+    validar_rango_paginas(15)
+
+    #--------------------Validar COD VENTA
+    validar_vacios(18)
+    validar_duplicados(18)
+    
+    #--------------------Validar COD PROD
+    validar_vacios(19)
+    validar_duplicados(19)
+
+    #--------------------Validar DESCRIPCIÓN COMERCIAL PAÍS
+    validar_vacios(20)
+    validar_duplicados(20)
+
+    #--------------------Validar OBSERVACION PDF
+    valores_pdf = consumir_conSQL("CJ", "CJ", 10)
+    valores_pdf = valores_pdf.iloc[:, 0].tolist()
+    validacion_basica(26, valores_pdf)
+
+    #--------------------Validar COSTO INICIAL
+    validar_vacios(29)
+
+    #--------------------Validar CANASTA FINAL
+    validar_vacios(30)
+
+    #--------------------Validar FLETE
+    validar_vacios(33)
+
+    #--------------------Validar PP
+    validar_vacios(34)
+
+    #--------------------Validar PO
+    validar_vacios(35)
+
+    #--------------------Validar DCTO ASESORA
+    validar_vacios(37)
+
+    #--------------------Validar V NETO
+    validar_vacios(40)
+
+    #--------------------Validar FACTOR INICIAL/BASE
+    validar_vacios(41)
+
+    #--------------------Validar AJUSTE FACTOR
+    for idx in range(fila_inicial, fila_final):
+        valor = float(df_CAT.iat[idx, 42])
+        if valor < 0 or valor > 2:
+            errores_lll.append({'fila': idx, 'col': 42})
+
+    #--------------------Validar FACTOR
+    validar_vacios(43)
+    validar_cero(43)
+
+    #--------------------Validar UNIDAD NAL
+    validar_vacios(44)
+
+    #--------------------Validar UNIDAD ADV
+    validar_vacios(45)
+
+    #--------------------Validar UNIDADES TOTALES
+    validar_vacios(46)
+
+    #--------------------Validar INV SOBRANTE A C+3 
+    validar_vacios(47)
+    validar_cero(47)
+
+    #--------------------Validar % CMV
+    validar_vacios(51)
+    #validar el procentaje
+    for idx in range(fila_inicial, fila_final):
+        valor = df_CAT.iat[idx, 51]
+    
+        try:
+            # Convertir diferentes formatos a float
+            if isinstance(valor, str):
+                # Quitar caracteres no numéricos excepto . y %
+                valor_limpio = valor.strip().replace(',', '.').replace('%', '')
+                if not valor_limpio:
+                    raise ValueError("Vacío")
+
+                porcentaje = float(valor_limpio)
+
+                # Verificar si tenía % para ajustar escala
+                if '%' in valor:
+                    porcentaje = porcentaje  # 50% = 50.0
+                else:
+                    porcentaje = porcentaje * 100  # 0.5 se considera 50%
+            else:
+                porcentaje = float(valor) * 100  # Si es decimal (0.37 -> 37%)
+
+            # Validar rango
+            if porcentaje <= 0 or porcentaje > 100:
+                errores_lll.append({'fila': idx, 'col': 51})
+
+        except (ValueError, TypeError, AttributeError):
+            # Registrar errores de conversión
+            print("Fallo en la evaluación del CMV")
+    
+    consola.configure(state="normal")         
+    consola.insert("end", f">>Realizando cientos de cálculos\ncomplejos...\n\n")     
+    consola.see("end")
+    consola.configure(state="disabled")
+    
+    #--------------------Validar COD ESTIMACIÓN
+    codis_estimacion = set(params.get("cod_estimacion"))
+    validacion_basica(53, codis_estimacion)
+
+    #--------------------Validar AGOTAR EXISTENCIA
+    agotar_existencia = set(params.get("agotar_existencia"))
+    validacion_basica(54, agotar_existencia)
+
+    #--------------------Validar DIGITABLE
+    digitables = set(params.get("digitables"))
+    validacion_basica(55, digitables)
+
+    #--------------------Validar ORIGEN
+    validar_vacios(56)
+
+    #--------------------Validar PEDIDOS 
+    pedidos = consumir_conSQL("AK", "AN", 30)
+    pedidos['codi_camp'] = pedidos["codi_camp"].astype(int)
+    pedidos['tota_pedi'] = pedidos["tota_pedi"].astype(int)
+    pedidos = pedidos[pedidos['codi_camp'] == int(campana_seleccionada)]['tota_pedi'].values[0]
+
+    pedidos = pedidos
+
+    for idx in range(fila_inicial, fila_final):
+        valor = float(df_CAT.iat[idx, 57])
+        if valor != pedidos:
+            errores_lll.append({'fila': idx, 'col': 57})
+
+    #--------------------Validar INDICADOR
+    indicador = set(params.get("indicador"))
+    validacion_basica(58, indicador)
+    
+    #--------------------Validar GRAMAJE
+    #--------------------Validar UNIDAD DE MEDIDA
+    #--------------------Validar PUM
+
+    #--------------------Validar PUNTOS
+    puntos = set(params.get("puntos"))
+    validacion_basica(68, puntos)
+
+    #--------------------Validar CAMPAÑA
+    for idx in range(fila_inicial, fila_final):
+        valor = float(df_CAT.iat[idx, 69])
+        if valor != int(campana_seleccionada):
+            errores_lll.append({'fila': idx, 'col': 69})
+
+    #--------------------Validar PUNTOS/ MAXIPUNTAJE
+    validar_vacios(70)
+
+    for idx in range(fila_inicial, fila_final):
+        valor = float(df_CAT.iat[idx, 70])
+        if valor != int:
+            errores_lll.append({'fila': idx, 'col': 70})
+
+
+
 
     print(errores_lll)
+
+    num_errores = len(errores_lll)
+
+    if num_errores == 0:
+        consola.configure(state="normal")         
+        consola.insert("end", f">>¡¡Felicitaciones!!, se han encontrado {num_errores} hallazgos :)\n")     
+        consola.see("end")
+        consola.configure(state="disabled")  
+    else:
+        consola.configure(state="normal")         
+        consola.insert("end", f">>Análisis terminado. Se han encontrado {num_errores} hallazgos en el LLL cargado.\n")     
+        consola.see("end")
+        consola.configure(state="disabled")  
 
     print("perrito")
 
