@@ -48,13 +48,12 @@ font_h1 = "Gilroy Black", 16
 font_h2 = "Gilroy Black", 12 
 font_normal = "Gilroy Medium", 14
 font_consola = "Consolas", 12
-background_color = "#FFF"
-items_color = "#4BCD5E"
-text_color = "#292731"
+
+background_color = "#F7FAFA"
+text_color = "#202C39"
+secondary_button = "#02C3BD"
 disabled_color = "#7C8483"
 
-""" items_color = "#FF4155"
-text_color = "#0A100D" """
 
 def main():
     ui()
@@ -74,7 +73,7 @@ def cargar_xlsx():
         selected_file = path
         files_loaded = True
 
-        archivo_msg = f">>{name}, el archivo elegido\nfue:→ {os.path.basename(path)}\n\n"
+        archivo_msg = f">>{name}, el archivo elegido\nfue: {os.path.basename(path)}\n\n"
         consola.configure(state="normal")         
         consola.insert("end", archivo_msg)     
         consola.see("end")
@@ -86,7 +85,7 @@ def cargar_xlsx():
 
 def ui():
     import datetime
-    global consola, btn_evaluar_lll, files_loaded, pais, campana
+    global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar
 
     ventana = tk.Tk()
     ventana.title("Fallometro - Verificador de LLL")
@@ -110,11 +109,11 @@ def ui():
     titulo.pack(pady=(15,0))
 
     #Establecer dos columnas
-    frame_contenido = tk.Frame(ventana, bg="#FFF")
+    frame_contenido = tk.Frame(ventana, bg=background_color)
     frame_contenido.pack(fill="both", expand=True, padx=20, pady=5)
 
     #----------------------Columna izquierda
-    columna_izquierda = tk.Frame(frame_contenido, bg="#FFF")
+    columna_izquierda = tk.Frame(frame_contenido, bg=background_color)
     columna_izquierda.grid(row=0, column=0, sticky="nsew")
 
     # Columna derecha
@@ -126,7 +125,7 @@ def ui():
     frame_contenido.columnconfigure(1, weight=1)    
 
     #both 
-    frame_both = tk.Frame(ventana, bg="#FFF")
+    frame_both = tk.Frame(ventana, bg=background_color)
     frame_both.pack(fill="both", expand=True, padx=5, pady=5)  
 
     #Contenido en izquierda
@@ -157,9 +156,9 @@ def ui():
         values=paises,
         fg_color=text_color,
         button_color=text_color,
-        text_color=items_color,
+        text_color=background_color,
         dropdown_fg_color=text_color,
-        dropdown_text_color=items_color,
+        dropdown_text_color=background_color,
         corner_radius=6,
         height=30,
         width=80,
@@ -205,9 +204,9 @@ def ui():
         values=[str(c) for c in campanas],
         fg_color=text_color,
         button_color=text_color,
-        text_color=items_color,
+        text_color=background_color,
         dropdown_fg_color=text_color,
-        dropdown_text_color=items_color,
+        dropdown_text_color=background_color,
         corner_radius=6,
         height=30,
         width=110,
@@ -222,7 +221,7 @@ def ui():
         text="Cargar Leader List Lite",
         command=cargar_xlsx,
         fg_color=text_color,
-        text_color=items_color,
+        text_color=background_color,
         font=font_normal,
         corner_radius=12,
         height=60, 
@@ -249,7 +248,7 @@ def ui():
     btn_descargar = ctk.CTkButton(
         columna_izquierda, 
         text="Descargar resultados",
-        #command=cargar_xlsx,
+        command=construir_resultado,
         #fg_color="#005E9E",
         fg_color= disabled_color,
         text_color="#E6E6E6",
@@ -267,13 +266,13 @@ def ui():
     columna_derecha,
     corner_radius=12,
     fg_color=text_color,
-    text_color=items_color,
+    text_color=background_color,
     font=font_consola,
     height=345
     )
     consola.pack(pady=(16,0), padx=(0,20), fill="both", expand=True)  
 
-    bienvenida = f">>¡Hola {name}!\nTe doy la bienvenida Fallometro\nPor favor, comienza cargando\nlos LLL a revisar...\n\n"
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Fallometro.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
     consola.insert("0.0", bienvenida)
 
     consola.configure(state="disabled")
@@ -289,7 +288,7 @@ def ui():
     imagen_tk = ImageTk.PhotoImage(imagen_redimensionada)
 
     # Crea el Label con la imagen
-    lbl_imagen = tk.Label(ventana, image=imagen_tk, bd=0, bg="#FFF")
+    lbl_imagen = tk.Label(ventana, image=imagen_tk, bd=0, bg=background_color)
     lbl_imagen.image = imagen_tk 
 
     # Delante de todo y coordenadas
@@ -306,13 +305,17 @@ def activar_analisis():
     
     #condiciones
     if files_loaded and pais_seleccionado != "País" and campana_seleccionada != "Campaña":
-        btn_evaluar_lll.configure(state="normal", fg_color=items_color)
+        btn_evaluar_lll.configure(state="normal", fg_color=secondary_button)
     else:
         btn_evaluar_lll.configure(state="disabled", fg_color=disabled_color)
 
+def acivar_resultado():
+    if len(errores_lll) > 0:
+        btn_descargar.configure(state="normal", fg_color=text_color, text_color=background_color)
+
 def validar_lll():
     import pandas as pd
-    global selected_file
+    global selected_file, ventana, errores_lll
     
     print("País seleccionado: ", pais_seleccionado)
     print("Campaña: ", campana_seleccionada)
@@ -321,6 +324,14 @@ def validar_lll():
     errores_lll = []
     fila_inicial = 6
 
+    #actualizar mensaje consola
+    def actualizar_consola(mensaje):
+        consola.configure(state="normal")         
+        consola.insert("end", f">>{mensaje}\n\n")     
+        consola.see("end")
+        consola.configure(state="disabled")
+        ventana.update_idletasks()
+
     #encontrar el final del LLL
     def encontrar_fin_datos(df, fila_inicial):
         #buscar la primera fila completamente vacía desde fila_inicial
@@ -328,7 +339,7 @@ def validar_lll():
             if df.iloc[idx].isna().all():
                 return idx  #devolver el indice de la ultima fila
         return len(df) #si no lo encuentra devolver el len del df    
-
+        
     #validar igual a cero
     def validar_cero(columna:int):
         for idx in range(fila_inicial, fila_final):
@@ -343,31 +354,6 @@ def validar_lll():
             # detección de vacío o error simple (#REF!, NaN, cadena vacía)
             if pd.isna(valor) or (isinstance(valor, str) and (valor.strip() == "" or valor.startswith("#"))):
                 errores_lll.append({'fila': idx, 'col': columna})
-
-    #validar que sea numero
-    def validar_numerico(columna: int, es_entero: bool = False):
-        for idx in range(fila_inicial, fila_final):
-            valor = df_CAT.iat[idx, columna]
-
-            #saltar celdas vacías
-            if pd.isna(valor) or es_error_excel(valor):
-                continue
-
-            #intentar conversión
-            try:
-                if isinstance(valor, str):
-                    valor = valor.replace(',', '.')
-                    num = float(valor.strip())
-                else:
-                    num = float(valor)
-
-                #validar tipo numérico
-                if es_entero:
-                    if not num.is_integer():
-                        raise ValueError("No es entero")
-
-            except (ValueError, TypeError, AttributeError):
-                errores_lll.append({'fila': idx,'col': columna})
 
     #valores repetidos en la misma columna
     def validar_duplicados(columna:int):
@@ -455,11 +441,7 @@ def validar_lll():
         #print(df_conSQL)
         return df_conSQL
     
-
-    consola.configure(state="normal")         
-    consola.insert("end", ">>Comenzando análisis del LLL cargado...\n\n")     
-    consola.see("end")
-    consola.configure(state="disabled")      
+    actualizar_consola("Comenzando el análisis del\nLLL cargado...")   
 
     if not selected_file:
         messagebox.showerror("Sin archivo", "No se ha seleccionado un archivo, por favor, seleccione alguno antes de continuar")
@@ -471,7 +453,7 @@ def validar_lll():
     except Exception as e:
         messagebox.showerror("Error al leer archivo", f"El archivo cargado no corresponde a un LLL")
         consola.configure(state="normal")         
-        consola.insert("end", "\n>>ERROR: El archivo cargado no corresponde a un LLL...")     
+        consola.insert("end", ">>ERROR: El archivo cargado no corresponde a un LLL...\n\n")     
         consola.see("end")
         consola.configure(state="disabled")
         return
@@ -489,7 +471,7 @@ def validar_lll():
     #Si coinciden los headers significa que es un LLL
     if headers[:71] != columnas_lll:
         consola.configure(state="normal")         
-        consola.insert("end", "\n>>ERROR: El archivo cargado no corresponde a un LLL...")     
+        consola.insert("end", "\n>>ERROR: El archivo cargado no corresponde a un LLL...\n\n")     
         consola.see("end")
         consola.configure(state="disabled")
         messagebox.showerror("Error en la lectura", "El LLL seleccionado no tiene la estructura adecuada. Por favor, no modificar el formato original entregado por el Área de Precios y Optimización. Específicamente por Don Rodrigo")
@@ -503,10 +485,7 @@ def validar_lll():
     if str(pais_L5) != str(pais_seleccionado):
         messagebox.showerror("Disparidad en país", "El país seleccionado no corresponde al país del LLL cargado.")        
     
-    consola.configure(state="normal")         
-    consola.insert("end", f">>Analizando todos los datos\ningresados...\n\n")     
-    consola.see("end")
-    consola.configure(state="disabled") 
+    actualizar_consola("Validando filas...")
 
     #--------------------Validar Tipo de Venta
     tipos_venta = set(params.get("tipo_venta"))
@@ -605,8 +584,7 @@ def validar_lll():
     validar_vacios(51)
     #validar el procentaje
     for idx in range(fila_inicial, fila_final):
-        valor = df_CAT.iat[idx, 51]
-    
+        valor = df_CAT.iat[idx, 51]    
         try:
             # Convertir diferentes formatos a float
             if isinstance(valor, str):
@@ -633,22 +611,89 @@ def validar_lll():
             # Registrar errores de conversión
             print("Fallo en la evaluación del CMV")
     
-    consola.configure(state="normal")         
-    consola.insert("end", f">>Realizando cientos de cálculos\ncomplejos...\n\n")     
-    consola.see("end")
-    consola.configure(state="disabled")
-    
+    actualizar_consola("Validando columnas...")
+      
     #--------------------Validar COD ESTIMACIÓN
-    codis_estimacion = set(params.get("cod_estimacion"))
-    validacion_basica(53, codis_estimacion)
+    #función para calcular valor esperado según la lógica de excel
+    def calcular_valor_estimacion(row):
+        try:
+            if (
+                (row[2] == "LIQUID") or       
+                (row[1] == "WEB") or          
+                (row[2] == "SORPRE") or       
+                (row[58] == "No")             
+            ):
+                return 63
+            elif row[2] == "SUST":            
+                return 50
+            elif row[1] == "PREM":           
+                return 36
+            else:
+                return 42
+            
+        except Exception as e:
+            print(f"Error en cálculo: {str(e)}")
+            return None
+
+    for idx in range(fila_inicial, fila_final):
+        try:
+            fila = df_CAT.iloc[idx] 
+            valor_real = fila.iloc[53]  
+            valor_esperado = calcular_valor_estimacion(fila)
+
+            if valor_esperado is not None and valor_real != valor_esperado:
+                errores_lll.append({'fila': idx, 'col': 53})  
+
+        except:
+            errores_lll.append({'fila': idx, 'col': 53})  
 
     #--------------------Validar AGOTAR EXISTENCIA
-    agotar_existencia = set(params.get("agotar_existencia"))
-    validacion_basica(54, agotar_existencia)
+    def calcular_valor_agtext(row):
+        try:
+            if row.iloc[2] in ["WEB", "OUTLET", "ALTERN", "LIQUID"]:
+                return "S"
+            else:
+                return "N"
+        except:
+            return None
+
+    for idx in range(fila_inicial, fila_final):
+        fila = df_CAT.iloc[idx]
+        valor_real = fila.iloc[54]  # Índice de la columna a validar
+        valor_esperado = calcular_valor_agtext(fila)
+        if valor_esperado is not None and valor_real != valor_esperado:
+            errores_lll.append({'fila': idx, 'col': 54})
 
     #--------------------Validar DIGITABLE
-    digitables = set(params.get("digitables"))
-    validacion_basica(55, digitables)
+    def calcular_valor_digitable(row):
+        try: 
+            col_C = 2   
+            col_S = 18   
+            col_T = 19   
+            col_AA = 26  
+            
+            # Condiciones principales
+            condicion_principal = (
+                row.iloc[col_C] in ["SUST", "GRATIS", "GRAMON", "1X2X", "ARMAOF", "1X2X3X"] or
+                (row.iloc[col_C] in ["ASPACK", "PACK"] and row.iloc[col_S] != row.iloc[col_T])
+            )
+
+            # Lógica completa
+            if condicion_principal:
+                return "N"
+            else:
+                return "B" if row.iloc[col_AA] == "Eliminar" else "S"
+
+        except Exception as e:
+            print(f"Error en cálculo DIGITABLE: {str(e)}")
+            return None
+
+    for idx in range(fila_inicial, fila_final):
+        fila = df_CAT.iloc[idx]  # Obtener fila completa
+        valor_real = fila.iloc[55]  # Columna 55 (índice 54 en base 0)
+        valor_esperado = calcular_valor_digitable(fila)
+        if valor_esperado is not None and valor_real != valor_esperado:
+            errores_lll.append({'fila': idx, 'col': 55}) 
 
     #--------------------Validar ORIGEN
     validar_vacios(56)
@@ -668,11 +713,22 @@ def validar_lll():
 
     #--------------------Validar INDICADOR
     indicador = set(params.get("indicador"))
-    validacion_basica(58, indicador)
-    
-    #--------------------Validar GRAMAJE
-    #--------------------Validar UNIDAD DE MEDIDA
-    #--------------------Validar PUM
+    validacion_basica(58, indicador)    
+
+    uens_detectadas = df_CAT.iloc[fila_inicial:fila_final, 4].unique()
+    uens_aprobadas = params.get("uens_aprobadas")
+    print(uens_detectadas)
+    print(uens_aprobadas)
+
+    if any(uen in uens_aprobadas for uen in uens_detectadas):
+        print("¡Se encontró al menos una UEN aprobada!")
+        #--------------------Validar GRAMAJE
+        validar_vacios(59)
+        #--------------------Validar UNIDAD DE MEDIDA
+        unidades_medida = consumir_conSQL("CH", "CH", 50)
+        validacion_basica(60, unidades_medida)
+        #--------------------Validar PUM
+        validar_vacios(61)
 
     #--------------------Validar PUNTOS
     puntos = set(params.get("puntos"))
@@ -685,33 +741,30 @@ def validar_lll():
             errores_lll.append({'fila': idx, 'col': 69})
 
     #--------------------Validar PUNTOS/ MAXIPUNTAJE
-    validar_vacios(70)
-
     for idx in range(fila_inicial, fila_final):
-        valor = float(df_CAT.iat[idx, 70])
-        if valor != int:
+        valor = df_CAT.iat[idx, 70]
+        # Verificar si es entero (int) o float equivalente a entero
+        es_entero = (
+            isinstance(valor, int) or 
+            (isinstance(valor, float) and valor.is_integer()
+        ))
+
+        # Validar tipo y rango
+        if not es_entero or valor < 0:
             errores_lll.append({'fila': idx, 'col': 70})
-
-
-
 
     print(errores_lll)
 
     num_errores = len(errores_lll)
 
     if num_errores == 0:
-        consola.configure(state="normal")         
-        consola.insert("end", f">>¡¡Felicitaciones!!, se han encontrado {num_errores} hallazgos :)\n")     
-        consola.see("end")
-        consola.configure(state="disabled")  
+        actualizar_consola(f"¡¡Felicitaciones!!, se han encontrado {num_errores} hallazgos :)")
     else:
-        consola.configure(state="normal")         
-        consola.insert("end", f">>Análisis terminado. Se han encontrado {num_errores} hallazgos en el LLL cargado.\n")     
-        consola.see("end")
-        consola.configure(state="disabled")  
+        actualizar_consola(f"Análisis terminado. Se han encontrado {num_errores} hallazgos en el\nLLL cargado. Ya puedes\ndescargar tus resultados")
+        acivar_resultado()
 
+def construir_resultado():
     print("perrito")
-
 
 
     
