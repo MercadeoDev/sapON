@@ -15,9 +15,9 @@ name = user_name.split(".")
 name = str(name[0]).capitalize()
 
 base_path = fr"{user_pc}\35159_147728_DUPREE_VENTA_DIRECTA_S_A\MERCADEO PAISES - MERCADEO PAISES DOCUMENTOS\Mercadeo BI\1. Arquitectura\Bases\15. Base Revisión LLL" 
+secret_path = fr"{user_pc}\35159_147728_DUPREE_VENTA_DIRECTA_S_A\MERCADEO PAISES - MERCADEO PAISES DOCUMENTOS\Mercadeo BI\1. Arquitectura\Bases\1. Plantillas\1. Regional\RegistroSTau"
 params_path = fr"{base_path}\2. Imágenes\params\params.json"
 version_path = fr"{base_path}\2. Imágenes\version.json"
-
 
 with open(params_path, "r", encoding="utf-8") as f:
     params = json.load(f)
@@ -51,9 +51,8 @@ font_consola = "Consolas", 12
 
 background_color = "#F7FAFA"
 text_color = "#202C39"
-secondary_button = "#02C3BD"
+secondary_button = "#228CDB"
 disabled_color = "#7C8483"
-
 
 def main():
     ui()
@@ -83,12 +82,36 @@ def cargar_xlsx():
     else:
         print("No se cargó ningún archivo.")
 
+def configurar_logs(user_name, base_path, secret_path):
+    import logging
+    logger = logging.getLogger("tauon_logger")
+    logger.setLevel(logging.INFO)
+
+    if not logger.handlers:
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+        # Ruta 1: log público
+        ruta_log_publico = os.path.join(base_path, "3. Log de Registro", f"log_tauon_{user_name}.log")
+        os.makedirs(os.path.dirname(ruta_log_publico), exist_ok=True)
+        handler_publico = logging.FileHandler(ruta_log_publico, encoding="utf-8")
+        handler_publico.setFormatter(formatter)
+        logger.addHandler(handler_publico)
+
+        # Ruta 2: log secreto
+        ruta_log_secreto = os.path.join(secret_path, "Log", f"log_tauon_{user_name}.log")
+        os.makedirs(os.path.dirname(ruta_log_secreto), exist_ok=True)
+        handler_secreto = logging.FileHandler(ruta_log_secreto, encoding="utf-8")
+        handler_secreto.setFormatter(formatter)
+        logger.addHandler(handler_secreto)
+
+    return logger
+
 def ui():
     import datetime
     global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar
 
     ventana = tk.Tk()
-    ventana.title("Fallometro - Verificador de LLL")
+    ventana.title("Tauón - Verificador de LLL")
     ventana.geometry("550x450")
     ventana.configure(bg=background_color)
     ventana.attributes('-alpha', 0.98)
@@ -105,7 +128,7 @@ def ui():
     
     ventana.resizable(False, False)    
 
-    titulo = tk.Label(ventana, text="Fallometro — Verificador de Leader List Lite", font=font_h1, bg=background_color, fg=text_color)
+    titulo = tk.Label(ventana, text="Tauón — Verificador de Leader List Lite", font=font_h1, bg=background_color, fg=text_color)
     titulo.pack(pady=(15,0))
 
     #Establecer dos columnas
@@ -220,8 +243,8 @@ def ui():
         columna_izquierda, 
         text="Cargar Leader List Lite",
         command=cargar_xlsx,
-        fg_color=text_color,
-        text_color=background_color,
+        fg_color=secondary_button,
+        text_color=text_color,
         font=font_normal,
         corner_radius=12,
         height=60, 
@@ -233,7 +256,7 @@ def ui():
     btn_evaluar_lll = ctk.CTkButton(
         columna_izquierda, 
         text="Comenzar evaluación de\nLLL cargados",
-        command=validar_lll,
+        command=verificar_seleccion,
         #fg_color=items_color,
         fg_color = disabled_color,
         text_color=text_color,
@@ -248,7 +271,7 @@ def ui():
     btn_descargar = ctk.CTkButton(
         columna_izquierda, 
         text="Descargar resultados",
-        command=construir_resultado,
+        command=generar_archivo,
         #fg_color="#005E9E",
         fg_color= disabled_color,
         text_color="#E6E6E6",
@@ -272,7 +295,7 @@ def ui():
     )
     consola.pack(pady=(16,0), padx=(0,20), fill="both", expand=True)  
 
-    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Fallometro.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Tauón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
     consola.insert("0.0", bienvenida)
 
     consola.configure(state="disabled")
@@ -297,28 +320,76 @@ def ui():
 
     ventana.mainloop()
 
+def reiniciar_gui():
+    global files_loaded, selected_file, errores_lll
+    # Reiniciar variables globales
+    files_loaded = False
+    selected_file = None
+    errores_lll = []
+    
+    # Restablecer menús desplegables
+    pais.set("País")
+    campana.set("Campaña")
+    
+    # Limpiar consola
+    consola.configure(state="normal")
+    consola.delete("1.0", "end")
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Tauón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
+    consola.insert("0.0", bienvenida)
+    consola.configure(state="disabled")
+    
+    # Desactivar botones
+    btn_evaluar_lll.configure(state="disabled", fg_color=disabled_color, text_color=text_color)
+    btn_descargar.configure(state="disabled", fg_color=disabled_color, text_color="#E6E6E6")
+
+def leer_lll(selected_file, sheets):
+    import pandas as pd
+    ext = os.path.splitext(selected_file)[-1].lower()
+    if ext == ".xlsb":
+        df = pd.read_excel(selected_file, sheet_name=sheets, header=None, engine="pyxlsb")
+    elif ext in [".xlsx", ".xls"]:
+        df = pd.read_excel(selected_file, sheet_name=sheets, header=None, engine="openpyxl")  
+    else:
+        raise ValueError("Formato de archivo no soportado") 
+    return df
+
 def activar_analisis():
     global btn_evaluar_lll, files_loaded, pais_seleccionado, campana_seleccionada
     #get valores
     pais_seleccionado = pais.get()
-    campana_seleccionada = campana.get()
-    
+    campana_seleccionada = campana.get()   
+
     #condiciones
     if files_loaded and pais_seleccionado != "País" and campana_seleccionada != "Campaña":
-        btn_evaluar_lll.configure(state="normal", fg_color=secondary_button)
+        btn_evaluar_lll.configure(state="normal", fg_color=text_color, text_color=background_color)
     else:
         btn_evaluar_lll.configure(state="disabled", fg_color=disabled_color)
 
 def acivar_resultado():
     if len(errores_lll) > 0:
-        btn_descargar.configure(state="normal", fg_color=text_color, text_color=background_color)
+        btn_descargar.configure(state="normal", fg_color=secondary_button, text_color=text_color)
+
+def verificar_seleccion():
+    global campana_B5, pais_L5
+
+    try:
+        df_CAT = leer_lll(selected_file, "LL CAT")    
+    except Exception as e:
+        messagebox.showerror("Error en la lectura", f"El archivo cargado no tiene la estructura adecuada.\n{name}, asegurate de usar la versión más reciente del formato de LLL entregado por el Área de Precios y Optimización y de no modificar los nombres y/o formatos de las primeras 71 columnas.")
+    pais_L5 = df_CAT.iloc[4,11]
+    campana_B5 = df_CAT.iloc[4,1]  
+
+    if str(pais_seleccionado) == str(pais_L5) and str(campana_seleccionada) == str(campana_B5):
+        validar_lll()
+    else:
+        messagebox.showerror("Error en selección", "El país o campaña seleccionados no coinciden con el país o campaña del LLL cargado.")
 
 def validar_lll():
     import pandas as pd
-    global selected_file, ventana, errores_lll
+    global selected_file, ventana, errores_lll, df_CAT, columnas_lll, campana_B5, pais_L5, nombre_archivo
     
-    print("País seleccionado: ", pais_seleccionado)
-    print("Campaña: ", campana_seleccionada)
+    #print("País seleccionado: ", pais_seleccionado)
+    #print("Campaña: ", campana_seleccionada)
 
     #almacen de errores
     errores_lll = []
@@ -351,9 +422,16 @@ def validar_lll():
     def validar_vacios(columna:int):
         for idx in range(fila_inicial, fila_final):
             valor = df_CAT.iat[idx, columna]
-            # detección de vacío o error simple (#REF!, NaN, cadena vacía)
-            if pd.isna(valor) or (isinstance(valor, str) and (valor.strip() == "" or valor.startswith("#"))):
+            # Verificar si el valor es NaN
+            if pd.isna(valor):
                 errores_lll.append({'fila': idx, 'col': columna})
+                continue
+            
+            # Si es una cadena, verificar si está vacía o contiene un error
+            if isinstance(valor, str):
+                valor_stripped = valor.strip()
+                if valor_stripped == "" or valor_stripped.startswith("#"):
+                    errores_lll.append({'fila': idx, 'col': columna})
 
     #valores repetidos en la misma columna
     def validar_duplicados(columna:int):
@@ -418,17 +496,6 @@ def validar_lll():
     def es_error_excel(v):
         return isinstance(v, str) and v.startswith("#") and v.endswith("!")
 
-    def leer_lll(selected_file, sheets):
-        ext = os.path.splitext(selected_file)[-1].lower()
-
-        if ext == ".xlsb":
-            df = pd.read_excel(selected_file, sheet_name=sheets, header=None, engine="pyxlsb")
-        elif ext in [".xlsx", ".xls"]:
-            df = pd.read_excel(selected_file, sheet_name=sheets, header=None, engine="openpyxl")  
-        else:
-            raise ValueError("Formato de archivo no soportado") 
-        return df
-
     def consumir_conSQL(columna_inicial, columna_final, filas:int):
         #toca asi porque no es capaz con la hoja completa
         df_conSQL = pd.read_excel(selected_file,
@@ -452,10 +519,7 @@ def validar_lll():
         df_CAT = leer_lll(selected_file, "LL CAT")
     except Exception as e:
         messagebox.showerror("Error al leer archivo", f"El archivo cargado no corresponde a un LLL")
-        consola.configure(state="normal")         
-        consola.insert("end", ">>ERROR: El archivo cargado no corresponde a un LLL...\n\n")     
-        consola.see("end")
-        consola.configure(state="disabled")
+
         return
 
     #-----------------Validar que sea un LLL a través de las primeras 71 columnas
@@ -467,40 +531,81 @@ def validar_lll():
     #Definición headers
     #print("Archivo cargado")
     headers = df_CAT.iloc[5].fillna("").tolist()
+    uens_detectadas = df_CAT.iloc[fila_inicial:fila_final, 4].unique()
 
     #Si coinciden los headers significa que es un LLL
     if headers[:71] != columnas_lll:
-        consola.configure(state="normal")         
+        messagebox.showerror("Error en la lectura", "El LLL seleccionado no tiene la estructura adecuada. Por favor, no modificar el formato original entregado por el Área de Precios y Optimización. Específicamente por Don Rodrigo")
+        """consola.configure(state="normal")         
         consola.insert("end", "\n>>ERROR: El archivo cargado no corresponde a un LLL...\n\n")     
         consola.see("end")
-        consola.configure(state="disabled")
-        messagebox.showerror("Error en la lectura", "El LLL seleccionado no tiene la estructura adecuada. Por favor, no modificar el formato original entregado por el Área de Precios y Optimización. Específicamente por Don Rodrigo")
+        consola.configure(state="disabled") """
 
     #----------------Validar que la campaña y el país sea igual
-    campana_B5 = df_CAT.iloc[4,1]  
     if str(campana_B5) != str(campana_seleccionada):
         messagebox.showerror("Disparidad en campañas", "La campaña seleccionada no corresponde a la campaña del LLL cargado.")        
-    
-    pais_L5 = df_CAT.iloc[4,11]
+
     if str(pais_L5) != str(pais_seleccionado):
         messagebox.showerror("Disparidad en país", "El país seleccionado no corresponde al país del LLL cargado.")        
     
     actualizar_consola("Validando filas...")
 
-    #--------------------Validar Tipo de Venta
-    tipos_venta = set(params.get("tipo_venta"))
+    #--------------------Validar Tipo de Venta -- CAMBIAR
+
+    uens_especiales = params.get("uens_especiales")
+    print(uens_especiales)
+    print(uens_detectadas)
+    if any(uen in uens_especiales for uen in uens_detectadas):
+        tipos_venta = consumir_conSQL("Y", "Y", 40)
+        print("Sí hay UENs especiales")
+    else:
+        tipos_venta = consumir_conSQL("X", "X", 40)
+        print("No hay UENs especiales")
+
+    tipos_venta = tipos_venta['Tipo Venta'].tolist()
+    tipos_venta = [int(x) for x in tipos_venta]
+    tipos_venta = [str(x) for x in tipos_venta]
+    print(tipos_venta)
     validacion_basica(0, tipos_venta)
 
     #--------------------Validar Vehiculo
-    vehiculo = set(params.get("vehiculo"))
+    vehiculo = consumir_conSQL("C", "C", 50)
+    vehiculo = vehiculo["codi_vehi"].tolist()
     validacion_basica(1, vehiculo)
 
     #--------------------Validar Estrategía
-    codi_estrategia = set(params.get("codigos_estrategia"))
+    codi_estrategia = consumir_conSQL("H", "H", 200)
+    codi_estrategia = codi_estrategia["codi_estr"].tolist()
     validacion_basica(2, codi_estrategia)
 
+    #--------------------Validar LINEA DE VENT
+    validar_vacios(3)
+
+    validar_vacios(4)
+
+    validar_vacios(5)
+
+    validar_vacios(6)
+
+    validar_vacios(7)
+
+    validar_vacios(8)
+
+    validar_vacios(9)
+
+    validar_vacios(10)
+
+    validar_vacios(11)
+    
     #--------------------Validar Tipo Programación
-    tipo_prog = set(params.get("tipo_prog"))
+    if any(uen in uens_especiales for uen in uens_detectadas):
+        tipo_prog = consumir_conSQL("BG", "BG", 15)
+        print("Sí hay UENs especiales")
+    else:
+        tipo_prog = consumir_conSQL("BF", "BF", 15)
+        print("No hay UENs especiales")
+        
+    tipo_prog = tipo_prog["Tipo_Prog"].tolist()
     validacion_basica(12, tipo_prog)
 
     #--------------------Validar COLECCIÓN CAPSULA
@@ -512,7 +617,7 @@ def validar_lll():
     validar_vacios(14)
     validar_rango_paginas(14)
 
-    #--------------------Validar PAG NAL
+    #--------------------Validar PAG ADV
     validar_vacios(15)
     validar_rango_paginas(15)
 
@@ -526,7 +631,13 @@ def validar_lll():
 
     #--------------------Validar DESCRIPCIÓN COMERCIAL PAÍS
     validar_vacios(20)
-    validar_duplicados(20)
+    #validar_duplicados(20)
+
+    validar_vacios(21)
+
+    validar_vacios(22)
+
+    validar_vacios(23)
 
     #--------------------Validar OBSERVACION PDF
     valores_pdf = consumir_conSQL("CJ", "CJ", 10)
@@ -539,6 +650,8 @@ def validar_lll():
     #--------------------Validar CANASTA FINAL
     validar_vacios(30)
 
+    validar_vacios(32)
+
     #--------------------Validar FLETE
     validar_vacios(33)
 
@@ -550,6 +663,8 @@ def validar_lll():
 
     #--------------------Validar DCTO ASESORA
     validar_vacios(37)
+
+    validar_vacios(39)
 
     #--------------------Validar V NETO
     validar_vacios(40)
@@ -567,6 +682,17 @@ def validar_lll():
     validar_vacios(43)
     validar_cero(43)
 
+    for idx in range(fila_inicial, fila_final):
+        valor_fact_ini = float(df_CAT.iat[idx, 41])
+        valor_ajuste = float(df_CAT.iat[idx, 42])
+        valor_factor = float(df_CAT.iat[idx, 43])
+
+        factor_esperado = valor_fact_ini * valor_ajuste
+
+        if valor_factor != factor_esperado:
+            errores_lll.append({'fila': idx, 'col': 43})
+            
+
     #--------------------Validar UNIDAD NAL
     validar_vacios(44)
 
@@ -576,10 +702,15 @@ def validar_lll():
     #--------------------Validar UNIDADES TOTALES
     validar_vacios(46)
 
-    #--------------------Validar INV SOBRANTE A C+3 
+    #--------------------Validar INV SOBRANTE A C+3 --Pendiente no captura el ref
     validar_vacios(47)
     validar_cero(47)
 
+    validar_vacios(48)
+    validar_cero(48)
+
+    validar_vacios(49)
+    validar_vacios(50)
     #--------------------Validar % CMV
     validar_vacios(51)
     #validar el procentaje
@@ -715,7 +846,6 @@ def validar_lll():
     indicador = set(params.get("indicador"))
     validacion_basica(58, indicador)    
 
-    uens_detectadas = df_CAT.iloc[fila_inicial:fila_final, 4].unique()
     uens_aprobadas = params.get("uens_aprobadas")
     print(uens_detectadas)
     print(uens_aprobadas)
@@ -726,13 +856,17 @@ def validar_lll():
         validar_vacios(59)
         #--------------------Validar UNIDAD DE MEDIDA
         unidades_medida = consumir_conSQL("CH", "CH", 50)
+        unidades_medida = unidades_medida.iloc[:, 0].tolist()
+        print(unidades_medida)
         validacion_basica(60, unidades_medida)
         #--------------------Validar PUM
         validar_vacios(61)
 
+    validar_vacios(66)
+    validar_vacios(67)
     #--------------------Validar PUNTOS
     puntos = set(params.get("puntos"))
-    validacion_basica(68, puntos)
+    validacion_basica(68, puntos)    
 
     #--------------------Validar CAMPAÑA
     for idx in range(fila_inicial, fila_final):
@@ -753,27 +887,188 @@ def validar_lll():
         if not es_entero or valor < 0:
             errores_lll.append({'fila': idx, 'col': 70})
 
-    print(errores_lll)
+    #print(errores_lll)
 
     num_errores = len(errores_lll)
 
     if num_errores == 0:
         actualizar_consola(f"¡¡Felicitaciones!!, se han encontrado {num_errores} hallazgos :)")
     else:
-        actualizar_consola(f"Análisis terminado. Se han encontrado {num_errores} hallazgos en el\nLLL cargado. Ya puedes\ndescargar tus resultados")
+        actualizar_consola(f"Análisis terminado.\n{num_errores} hallazgos encontrados.")
+        actualizar_consola(f"El archivo de hallazgos ya\npuede ser descargado.")
+
         acivar_resultado()
 
-def construir_resultado():
-    print("perrito")
+    nombre_archivo = f"Hallazgos LLL - {pais_L5} - {campana_B5}"
+
+    logger = configurar_logs(user_name, base_path, secret_path)
+    logger.info(f'{nombre_archivo} - {user_name} - {num_errores}') 
+
+    #mensaje éxito
+    messagebox.showinfo(f"¡Archivo listo para descargar!", f"{name}, el archivo de hallazgos solicitado ya está listo para descargarse.")
+
+def construir_resultado(errores, df, campana, pais):
+    import logging
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment 
+    from openpyxl.utils import get_column_letter
+    import pandas as pd
+
+    global columnas_lll 
 
 
+    # Configuración de estilos
+    color_error = PatternFill(start_color="9C95DC", end_color="9C95DC", fill_type="solid")
+    header_fill = PatternFill(start_color="202C39", end_color="202C39", fill_type="solid")  
+    header_font = Font(color="F7FAFA", bold=True)  
+    meta_fill_label = header_fill  
+    meta_fill_value = PatternFill(start_color="228CDB", end_color="228CDB", fill_type="solid")
+    meta_font_white = Font(color="F7FAFA", bold=True)
+    alignment_center = Alignment(horizontal="center", vertical="center")
+
+    # Validaciones
+    if len(columnas_lll) != 71:
+        raise ValueError("cols_LLL debe tener exactamente 71 columnas")
+    if len(df.columns) < 71:
+        raise ValueError("El DataFrame debe tener al menos 71 columnas")
+
+    #saltar las primeras 6
+    df = df.iloc[1:].reset_index(drop=True)
+
+    # Preparar DataFrame para errores
+    nuevas_cols = ['Indicador de Fila'] + columnas_lll
+    df_errores = pd.DataFrame(columns=nuevas_cols)
+    df_errores = df_errores.sort_values(by='Indicador de Fila').reset_index(drop=True)
+
+    # Agrupar errores por fila (clave: fila de Excel)
+    errores_por_fila = {}
+    for error in errores:
+        fila_excel = error['fila']
+        if fila_excel not in errores_por_fila:
+            errores_por_fila[fila_excel] = []
+        errores_por_fila[fila_excel].append(error['col'])
+
+    # Filtrar solo las filas del DataFrame que tienen errores
+    indices_con_errores = [fila_excel - 1 for fila_excel in errores_por_fila if (fila_excel - 1) in df.index]
     
+    # Llenar df_errores con las filas que tienen errores
+    for fila_idx in indices_con_errores:
+        fila_data = df.iloc[fila_idx, :71].tolist()
+        fila_excel = fila_idx + 1  # Convertir a fila de Excel
+        df_errores.loc[fila_idx] = [fila_excel + 1] + fila_data
 
+    # Crear archivo Excel
+    wb = Workbook()
+    ws = wb.active
+
+    # Metadatos (filas 1-2)
+    ws['A1'] = 'Campaña'
+    ws['A1'].alignment = alignment_center
+    ws['A1'].fill = meta_fill_label
+    ws['A1'].font = meta_font_white
+
+    ws['B1'] = campana
+    ws['B1'].alignment = alignment_center
+    ws['B1'].fill = meta_fill_value
+    ws['B1'].font = meta_font_white
+    
+    ws['C1'] = 'País'
+    ws['C1'].alignment = alignment_center
+    ws['C1'].fill = meta_fill_label
+    ws['C1'].font = meta_font_white
+
+    ws['D1'] = pais
+    ws['D1'].alignment = alignment_center
+    ws['D1'].fill = meta_fill_value
+    ws['D1'].font = meta_font_white
+
+
+    # Escribir headers con estilo
+    for col_num, header in enumerate(nuevas_cols, 1):
+        cell = ws.cell(row=2, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = alignment_center
+
+    # Escribir datos y resaltar errores
+    for r_idx, row in enumerate(df_errores.itertuples(index=False), 3):
+        for c_idx, value in enumerate(row, 1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = alignment_center 
+            
+            fila_excel = row[0] - 1  # Fila en Excel (base 1)
+            if fila_excel in errores_por_fila:
+                col_original = c_idx - 2  # Ajuste para columnas base 0
+                if col_original in errores_por_fila[fila_excel]:
+                    cell.fill = color_error
+
+    #ajustar ancho de columnas automáticamente
+    for column_cells in ws.columns:
+        max_length = 0
+        column = get_column_letter(column_cells[0].column)  # 'A', 'B', 'C', etc.
+
+        for cell in column_cells:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+
+        adjusted_width = max_length + 5  # Añade un poco de margen
+        ws.column_dimensions[column].width = adjusted_width
+
+        #activar
+        ultima_columna = get_column_letter(ws.max_column)
+        ws.auto_filter.ref = f"A2:{ultima_columna}2"
+
+    return wb
+
+def generar_archivo():    
+    from datetime import datetime
+
+    print("Parametros seleccionados:\n\n")
+    print("errores", errores_lll)
+    print("dfCat", df_CAT)
+    print("Campana", campana_seleccionada)
+    print("pais", pais_seleccionado)
+
+    archivo_errores = construir_resultado(errores_lll, df_CAT, campana_seleccionada, pais_seleccionado)
+
+    try:
+        documents_dir = os.path.join(os.path.expanduser('~'), 'Documents')
+        archivo_errores.save(os.path.join(documents_dir, f"{nombre_archivo}.xlsx"))
+
+        fecha_actual = datetime.now()
+        fecha_formateada = fecha_actual.strftime('%d_%m_%Y-%H_%M_%S')
+
+        try:
+            ruta_secreta = fr"{secret_path}/Archivos/{user_name}"
+
+            if not os.path.exists(ruta_secreta):
+                os.makedirs(ruta_secreta, exist_ok=True)
+
+            #print("Guardando archivo en:", ruta_final)
+            archivo_errores.save(fr"{ruta_secreta}/{nombre_archivo} - {fecha_formateada}.xlsx")
+
+        except Exception as e:
+            print("Error al guardar en ruta secreta:", e)
+
+        messagebox.showinfo(
+            "¡Éxito! ¡Gracias por usar Tauón!",
+            f"{name}, el archivo fue generado en la carpeta Documentos.\n\nSe abrirá la carpeta de destino."
+            )
+        os.startfile(documents_dir)
+
+        reiniciar_gui()
+
+    except Exception as e:
+        messagebox.showerror("Error al generar el archivo", "Cierre el archivo antes de intentar generar una nueva versión.")
+        print("Error en la generación del archivo:", e)
 
 if version_actual == version_sp:
     main()
 else:
-    messagebox.showerror("Error de versión en Fallometro", f"Por favor, actualice a la versión más reciente: v{version_sp}")
+    messagebox.showerror("Error de versión en Tauón", f"Por favor, actualice a la versión más reciente: v{version_sp}")
 
 
 
