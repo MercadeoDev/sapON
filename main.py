@@ -7,7 +7,8 @@ from PIL import Image, ImageTk
 
 import os
 import json
-import sys
+#hilos para evitar el crasheo  de la ui
+import threading
 
 user_pc = os.environ["USERPROFILE"]
 user_name = os.path.basename(user_pc) 
@@ -47,18 +48,34 @@ selected_file = None
 font_h1 = "Gilroy Black", 16
 font_h2 = "Gilroy Black", 12 
 font_normal = "Gilroy Medium", 14
-font_consola = "Consolas", 12
+font_consola = "Consolas", 12, "bold"
 
 background_color = "#F7FAFA"
 text_color = "#202C39"
-secondary_button = "#228CDB"
+#secondary_button = "#228CDB"
+secondary_button = "#957FEF"
 disabled_color = "#7C8483"
 
 def main():
     ui()
 
+#actualizar mensaje consola
+def actualizar_consola(mensaje):
+    consola.configure(state="normal")         
+    consola.insert("end", f">>{mensaje}\n\n")     
+    consola.see("end")
+    consola.configure(state="disabled")
+    ventana.update_idletasks()
+
 def cargar_xlsx():
     global consola, btn_evaluar_lll, selected_file, files_loaded
+
+    # Limpiar consola
+    consola.configure(state="normal")
+    consola.delete("1.0", "end")
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Gravitón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
+    consola.insert("0.0", bienvenida)
+    consola.configure(state="disabled")
 
     print("Cargando Leader List Lite...")
 
@@ -72,15 +89,16 @@ def cargar_xlsx():
         selected_file = path
         files_loaded = True
 
-        archivo_msg = f">>{name}, el archivo elegido\nfue: {os.path.basename(path)}\n\n"
-        consola.configure(state="normal")         
-        consola.insert("end", archivo_msg)     
-        consola.see("end")
-        consola.configure(state="disabled")  
+        archivo_msg = f"{name}, el archivo elegido\nfue: {os.path.basename(path)}"
+        actualizar_consola(archivo_msg)
 
         activar_analisis()
     else:
         print("No se cargó ningún archivo.")
+
+#detector de errores nativos de excel
+def es_error_excel(v):
+    return isinstance(v, str) and v.startswith("#") and v.endswith("!")
 
 def configurar_logs(user_name, base_path, secret_path):
     import logging
@@ -108,10 +126,10 @@ def configurar_logs(user_name, base_path, secret_path):
 
 def ui():
     import datetime
-    global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar
+    global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar, btn_cargar_lll, ruta_ico
 
     ventana = tk.Tk()
-    ventana.title("Tauón - Verificador de LLL")
+    ventana.title("Gravitón - Verificador de LLL")
     ventana.geometry("550x450")
     ventana.configure(bg=background_color)
     ventana.attributes('-alpha', 0.98)
@@ -128,7 +146,7 @@ def ui():
     
     ventana.resizable(False, False)    
 
-    titulo = tk.Label(ventana, text="Tauón — Verificador de Leader List Lite", font=font_h1, bg=background_color, fg=text_color)
+    titulo = tk.Label(ventana, text="Gravitón — Verificador de Leader List Lite", font=font_h1, bg=background_color, fg=text_color)
     titulo.pack(pady=(15,0))
 
     #Establecer dos columnas
@@ -256,10 +274,10 @@ def ui():
     btn_evaluar_lll = ctk.CTkButton(
         columna_izquierda, 
         text="Comenzar evaluación de\nLLL cargados",
-        command=verificar_seleccion,
+        command=thread_evaluacion,
         #fg_color=items_color,
         fg_color = disabled_color,
-        text_color=text_color,
+        text_color=background_color,
         font=font_normal,
         corner_radius=12,
         height=60, 
@@ -274,7 +292,7 @@ def ui():
         command=generar_archivo,
         #fg_color="#005E9E",
         fg_color= disabled_color,
-        text_color="#E6E6E6",
+        text_color = background_color,
         font=font_normal,
         corner_radius=12,
         height=60, 
@@ -290,12 +308,13 @@ def ui():
     corner_radius=12,
     fg_color=text_color,
     text_color=background_color,
+    #text_color=background_color,
     font=font_consola,
     height=345
     )
     consola.pack(pady=(16,0), padx=(0,20), fill="both", expand=True)  
 
-    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Tauón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Gravitón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
     consola.insert("0.0", bienvenida)
 
     consola.configure(state="disabled")
@@ -334,13 +353,84 @@ def reiniciar_gui():
     # Limpiar consola
     consola.configure(state="normal")
     consola.delete("1.0", "end")
-    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Tauón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
+    bienvenida = f">>¡Hola {name}! Te doy la \nbienvenida a Gravitón.\nPor favor, comienza cargando\nel LLL a revisar...\n\n"
     consola.insert("0.0", bienvenida)
     consola.configure(state="disabled")
     
     # Desactivar botones
     btn_evaluar_lll.configure(state="disabled", fg_color=disabled_color, text_color=text_color)
     btn_descargar.configure(state="disabled", fg_color=disabled_color, text_color="#E6E6E6")
+
+def popup(titulo, texto):
+    dlg = ctk.CTkToplevel(ventana)
+    dlg.title(titulo)
+    ancho, alto = 300, 150
+    dlg.geometry(f"{ancho}x{alto}")
+
+    # 2) No dejar cambiar tamaño
+    dlg.resizable(False, False)
+    # (opcional) quitar maximizar/minimizar
+    dlg.attributes('-toolwindow', True)
+
+    dlg.attributes('-topmost', True)
+    dlg.grab_set()    
+
+    # Label con wrap y centrado dentro del fijo
+    lbl = ctk.CTkLabel(
+        dlg,
+        text=texto,
+        font=font_normal,
+        wraplength=ancho - 40,  # deja algo de margen
+        justify="center"
+    )
+    lbl.place(relx=0.5, rely=0.4, anchor="center")
+
+    btn = ctk.CTkButton(
+        dlg,
+        text="OK",
+        command=dlg.destroy,
+        fg_color=secondary_button,
+        text_color=text_color,
+        font=font_normal,
+        width=120,
+        height=30
+    )
+    btn.place(relx=0.5, rely=0.75, anchor="center")
+
+    # Centrar ventana sobre la principal
+    px = ventana.winfo_rootx()
+    py = ventana.winfo_rooty()
+    pw = ventana.winfo_width()
+    ph = ventana.winfo_height()
+    x = px + (pw - ancho)//2
+    y = py + (ph - alto)//2
+    dlg.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    dlg.wait_window()
+
+def thread_evaluacion():
+    #evitar doble clic
+    btn_cargar_lll.configure(state="disabled")
+    btn_evaluar_lll.configure(state="disabled")
+    threading.Thread(target=_verificar_con_callback, daemon=True).start()
+
+def thred_generacion():
+    btn_descargar.configure(state="disabled")
+    threading.Thread(target=_generar_con_callback, daemon=True).start()
+
+def _generar_con_callback():
+    try:
+        generar_archivo()
+    finally:
+        ventana.after(0, lambda: btn_descargar.configure(state="normal"))
+
+def _verificar_con_callback():
+    try:
+        verificar_seleccion()
+    finally:
+        #cuando termine, vuelve al hilo de la GUI para reactivar
+        ventana.after(0, lambda: btn_evaluar_lll.configure(state="normal"))
+        ventana.after(0, lambda: btn_cargar_lll.configure(state="normal"))
 
 def leer_lll(selected_file, sheets):
     import pandas as pd
@@ -351,6 +441,7 @@ def leer_lll(selected_file, sheets):
         df = pd.read_excel(selected_file, sheet_name=sheets, header=None, engine="openpyxl")  
     else:
         raise ValueError("Formato de archivo no soportado") 
+
     return df
 
 def activar_analisis():
@@ -383,6 +474,7 @@ def verificar_seleccion():
         validar_lll()
     else:
         messagebox.showerror("Error en selección", "El país o campaña seleccionados no coinciden con el país o campaña del LLL cargado.")
+        reiniciar_gui()
 
 def validar_lll():
     import pandas as pd
@@ -391,17 +483,11 @@ def validar_lll():
     #print("País seleccionado: ", pais_seleccionado)
     #print("Campaña: ", campana_seleccionada)
 
+    print("Comenzando validación")        
+
     #almacen de errores
     errores_lll = []
     fila_inicial = 6
-
-    #actualizar mensaje consola
-    def actualizar_consola(mensaje):
-        consola.configure(state="normal")         
-        consola.insert("end", f">>{mensaje}\n\n")     
-        consola.see("end")
-        consola.configure(state="disabled")
-        ventana.update_idletasks()
 
     #encontrar el final del LLL
     def encontrar_fin_datos(df, fila_inicial):
@@ -491,10 +577,6 @@ def validar_lll():
 
             except Exception as e:
                 errores_lll.append({'fila': idx, 'col': pagina_evaluada})
-
-    #detector de errores nativos de excel
-    def es_error_excel(v):
-        return isinstance(v, str) and v.startswith("#") and v.endswith("!")
 
     def consumir_conSQL(columna_inicial, columna_final, filas:int):
         #toca asi porque no es capaz con la hoja completa
@@ -640,7 +722,13 @@ def validar_lll():
     validar_vacios(23)
 
     #--------------------Validar OBSERVACION PDF
-    valores_pdf = consumir_conSQL("CJ", "CJ", 10)
+    if any(uen in uens_especiales for uen in uens_detectadas):
+        valores_pdf = consumir_conSQL("CK", "CK", 15)
+        print("Sí hay UENs especiales")
+    else:
+        valores_pdf = consumir_conSQL("CJ", "CJ", 15)
+        print("No hay UENs especiales")
+
     valores_pdf = valores_pdf.iloc[:, 0].tolist()
     validacion_basica(26, valores_pdf)
 
@@ -663,6 +751,8 @@ def validar_lll():
 
     #--------------------Validar DCTO ASESORA
     validar_vacios(37)
+
+    validar_vacios(38)
 
     validar_vacios(39)
 
@@ -830,7 +920,13 @@ def validar_lll():
     validar_vacios(56)
 
     #--------------------Validar PEDIDOS 
-    pedidos = consumir_conSQL("AK", "AN", 30)
+    if any(uen in uens_especiales for uen in uens_detectadas):
+        pedidos = consumir_conSQL("AL", "AO", 30)
+        print("Sí hay UENs especiales")
+    else:
+        pedidos = consumir_conSQL("AK", "AN", 30)
+        print("No hay UENs especiales")
+
     pedidos['codi_camp'] = pedidos["codi_camp"].astype(int)
     pedidos['tota_pedi'] = pedidos["tota_pedi"].astype(int)
     pedidos = pedidos[pedidos['codi_camp'] == int(campana_seleccionada)]['tota_pedi'].values[0]
@@ -855,7 +951,13 @@ def validar_lll():
         #--------------------Validar GRAMAJE
         validar_vacios(59)
         #--------------------Validar UNIDAD DE MEDIDA
-        unidades_medida = consumir_conSQL("CH", "CH", 50)
+        if any(uen in uens_especiales for uen in uens_detectadas):
+            unidades_medida = consumir_conSQL("CI", "CI", 50)
+            print("Sí hay UENs especiales")
+        else:
+            unidades_medida = consumir_conSQL("CH", "CH", 50)
+            print("No hay UENs especiales")
+
         unidades_medida = unidades_medida.iloc[:, 0].tolist()
         print(unidades_medida)
         validacion_basica(60, unidades_medida)
@@ -894,7 +996,7 @@ def validar_lll():
     if num_errores == 0:
         actualizar_consola(f"¡¡Felicitaciones!!, se han encontrado {num_errores} hallazgos :)")
     else:
-        actualizar_consola(f"Análisis terminado.\n{num_errores} hallazgos encontrados.")
+        actualizar_consola(f"Análisis terminado.\n{num_errores} hallazgos resaltados.")
         actualizar_consola(f"El archivo de hallazgos ya\npuede ser descargado.")
 
         acivar_resultado()
@@ -905,14 +1007,14 @@ def validar_lll():
     logger.info(f'{nombre_archivo} - {user_name} - {num_errores}') 
 
     #mensaje éxito
-    messagebox.showinfo(f"¡Archivo listo para descargar!", f"{name}, el archivo de hallazgos solicitado ya está listo para descargarse.")
+    popup("¡Archivo listo!", f"{name}, el archivo de hallazgos solicitado ya está listo.")
 
 def construir_resultado(errores, df, campana, pais):
-    import logging
     from openpyxl import Workbook
     from openpyxl.styles import PatternFill, Font, Alignment 
     from openpyxl.utils import get_column_letter
     import pandas as pd
+    import re
 
     global columnas_lll 
 
@@ -925,6 +1027,18 @@ def construir_resultado(errores, df, campana, pais):
     meta_fill_value = PatternFill(start_color="228CDB", end_color="228CDB", fill_type="solid")
     meta_font_white = Font(color="F7FAFA", bold=True)
     alignment_center = Alignment(horizontal="center", vertical="center")
+    hex_pattern = re.compile(r'^0x[0-9A-Fa-f]+$')
+    hex_color = PatternFill(start_color="FFE8E8", end_color="FFE8E8", fill_type="solid")
+
+    hex_to_error = {
+    "0x00": "#N/D!",
+    "0x07": "#DIV/0!",
+    "0x0f": "#VALOR!",
+    "0x17": "#REF!",
+    "0x1d": "#NAME?",
+    "0x24": "#NUM!",
+    "0x2a": "#NULL!"
+    }
 
     # Validaciones
     if len(columnas_lll) != 71:
@@ -990,17 +1104,7 @@ def construir_resultado(errores, df, campana, pais):
         cell.font = header_font
         cell.alignment = alignment_center
 
-    # Escribir datos y resaltar errores
-    for r_idx, row in enumerate(df_errores.itertuples(index=False), 3):
-        for c_idx, value in enumerate(row, 1):
-            cell = ws.cell(row=r_idx, column=c_idx, value=value)
-            cell.alignment = alignment_center 
-            
-            fila_excel = row[0] - 1  # Fila en Excel (base 1)
-            if fila_excel in errores_por_fila:
-                col_original = c_idx - 2  # Ajuste para columnas base 0
-                if col_original in errores_por_fila[fila_excel]:
-                    cell.fill = color_error
+
 
     #ajustar ancho de columnas automáticamente
     for column_cells in ws.columns:
@@ -1021,6 +1125,27 @@ def construir_resultado(errores, df, campana, pais):
         ultima_columna = get_column_letter(ws.max_column)
         ws.auto_filter.ref = f"A2:{ultima_columna}2"
 
+    #resaltar errores de excel
+    for r_idx, row in enumerate(df_errores.itertuples(index=False), start=3):
+        for c_idx, value in enumerate(row, start=1):
+            # 1) ¿Es hexadecimal?
+            if isinstance(value, str) and hex_pattern.match(value):
+                human = hex_to_error.get(value, value)
+                cell = ws.cell(row=r_idx, column=c_idx, value=human)
+                cell.fill      = hex_color
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                continue
+
+            # 2) Si no, lo escribo normal
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # 3) Y sólo si estaba en tu lista de errores, le pongo el color morado
+            fila_excel  = row[0] - 1
+            col_original = c_idx - 2
+            if fila_excel in errores_por_fila and col_original in errores_por_fila[fila_excel]:
+                cell.fill = color_error
+
     return wb
 
 def generar_archivo():    
@@ -1028,11 +1153,14 @@ def generar_archivo():
 
     print("Parametros seleccionados:\n\n")
     print("errores", errores_lll)
-    print("dfCat", df_CAT)
+    #print("dfCat", df_CAT)
     print("Campana", campana_seleccionada)
     print("pais", pais_seleccionado)
 
     archivo_errores = construir_resultado(errores_lll, df_CAT, campana_seleccionada, pais_seleccionado)
+    #asignacion nombre
+    hoja = archivo_errores.active
+    hoja.title = "Hallazgos LLL"
 
     try:
         documents_dir = os.path.join(os.path.expanduser('~'), 'Documents')
@@ -1053,10 +1181,8 @@ def generar_archivo():
         except Exception as e:
             print("Error al guardar en ruta secreta:", e)
 
-        messagebox.showinfo(
-            "¡Éxito! ¡Gracias por usar Tauón!",
-            f"{name}, el archivo fue generado en la carpeta Documentos.\n\nSe abrirá la carpeta de destino."
-            )
+        popup("¡Éxito! ¡Gracias por usar Gravitón!", f"{name}, el archivo fue generado en la\ncarpeta Documentos.\n\nSe abrirá la carpeta de destino.")
+
         os.startfile(documents_dir)
 
         reiniciar_gui()
@@ -1068,20 +1194,4 @@ def generar_archivo():
 if version_actual == version_sp:
     main()
 else:
-    messagebox.showerror("Error de versión en Tauón", f"Por favor, actualice a la versión más reciente: v{version_sp}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    messagebox.showerror("Error de versión en Gravitón", f"Por favor, actualice a la versión más reciente: v{version_sp}")
