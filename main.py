@@ -102,21 +102,21 @@ def es_error_excel(v):
 
 def configurar_logs(user_name, base_path, secret_path):
     import logging
-    logger = logging.getLogger("tauon_logger")
+    logger = logging.getLogger("graviton_logger")
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
         # Ruta 1: log público
-        ruta_log_publico = os.path.join(base_path, "3. Log de Registro", f"log_tauon_{user_name}.log")
+        ruta_log_publico = os.path.join(base_path, "3. Log de Registro", f"log_graviton_{user_name}.log")
         os.makedirs(os.path.dirname(ruta_log_publico), exist_ok=True)
         handler_publico = logging.FileHandler(ruta_log_publico, encoding="utf-8")
         handler_publico.setFormatter(formatter)
         logger.addHandler(handler_publico)
 
         # Ruta 2: log secreto
-        ruta_log_secreto = os.path.join(secret_path, "Log", f"log_tauon_{user_name}.log")
+        ruta_log_secreto = os.path.join(secret_path, "Log", f"log_graviton_{user_name}.log")
         os.makedirs(os.path.dirname(ruta_log_secreto), exist_ok=True)
         handler_secreto = logging.FileHandler(ruta_log_secreto, encoding="utf-8")
         handler_secreto.setFormatter(formatter)
