@@ -1,7 +1,7 @@
 #Interfaz gráfica
 import tkinter as tk
 from tkinter import messagebox, filedialog
-from tkinter.scrolledtext import ScrolledText
+
 import customtkinter as ctk
 from PIL import Image, ImageTk 
 
@@ -273,7 +273,7 @@ def ui():
     #botones
     btn_evaluar_lll = ctk.CTkButton(
         columna_izquierda, 
-        text="Comenzar evaluación de\nLLL cargados",
+        text="Comenzar evaluación de\nLLL cargado",
         command=thread_evaluacion,
         #fg_color=items_color,
         fg_color = disabled_color,
@@ -288,7 +288,7 @@ def ui():
 
     btn_descargar = ctk.CTkButton(
         columna_izquierda, 
-        text="Descargar resultados",
+        text="Descargar resultado",
         command=generar_archivo,
         #fg_color="#005E9E",
         fg_color= disabled_color,
@@ -1018,7 +1018,6 @@ def construir_resultado(errores, df, campana, pais):
 
     global columnas_lll 
 
-
     # Configuración de estilos
     color_error = PatternFill(start_color="9C95DC", end_color="9C95DC", fill_type="solid")
     header_fill = PatternFill(start_color="202C39", end_color="202C39", fill_type="solid")  
@@ -1071,6 +1070,14 @@ def construir_resultado(errores, df, campana, pais):
         fila_excel = fila_idx + 1  # Convertir a fila de Excel
         df_errores.loc[fila_idx] = [fila_excel + 1] + fila_data
 
+    #orden
+    df_errores.sort_values(
+        by='Indicador de Fila',
+        ascending=True,
+        inplace=True
+    )
+    df_errores.reset_index(drop=True, inplace=True)
+
     # Crear archivo Excel
     wb = Workbook()
     ws = wb.active
@@ -1103,8 +1110,6 @@ def construir_resultado(errores, df, campana, pais):
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = alignment_center
-
-
 
     #ajustar ancho de columnas automáticamente
     for column_cells in ws.columns:
