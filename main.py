@@ -96,10 +96,6 @@ def cargar_xlsx():
     else:
         print("No se cargó ningún archivo.")
 
-#detector de errores nativos de excel
-def es_error_excel(v):
-    return isinstance(v, str) and v.startswith("#") and v.endswith("!")
-
 def configurar_logs(user_name, base_path, secret_path):
     import logging
     logger = logging.getLogger("graviton_logger")
@@ -496,7 +492,20 @@ def validar_lll():
             if df.iloc[idx].isna().all():
                 return idx  #devolver el indice de la ultima fila
         return len(df) #si no lo encuentra devolver el len del df    
-        
+    
+    #detector de errores nativos de excel
+    def es_error_excel(v):
+        import re
+        if not isinstance(v, str):
+            return False
+
+        # Patrones regex para detectar ambos tipos de errores
+        hex_error_pattern = r'^0x[0-9A-Fa-f]{2}$'  # Ej: 0x17, 0x2A
+
+        return bool(
+            re.fullmatch(hex_error_pattern, v)    # Códigos hexadecimales
+        )
+
     #validar igual a cero
     def validar_cero(columna:int):
         for idx in range(fila_inicial, fila_final):
@@ -792,7 +801,37 @@ def validar_lll():
     #--------------------Validar UNIDADES TOTALES
     validar_vacios(46)
 
-    #--------------------Validar INV SOBRANTE A C+3 --Pendiente no captura el ref
+    #--------------------Validar INV SOBRANTE A C+3
+    #Si en COD ESTIMACION == 50 then revisar la 46 y si el valor > 60% de 47 then error
+    for idx in range(fila_inicial, fila_final):
+        # Primero obtener los valores del DataFrame
+        valor_unitota = df_CAT.iat[idx, 46]
+        valor_invC3 = df_CAT.iat[idx, 47]
+        valor_codest = df_CAT.iat[idx, 53]
+
+        # Verificar si los valores NO son NaN ni errores de Excel
+        if not (
+            pd.isna(valor_unitota) 
+            or pd.isna(valor_invC3) 
+            or pd.isna(valor_codest)
+            or es_error_excel(valor_unitota) 
+            or es_error_excel(valor_invC3) 
+            or es_error_excel(valor_codest)
+        ):
+
+            try:
+                valor_unitota_int = int(valor_unitota)
+                valor_invC3_int = int(valor_invC3)
+                valor_codest_int = int(valor_codest)
+
+                # Aplicar regla de negocio
+                if valor_codest_int == 50 and valor_unitota_int > (valor_invC3_int * 0.6):
+                    errores_lll.append({'fila': idx, 'col': 47})
+
+            except Exception as e:
+                print("No se pudo hacer la conversión", e)
+
+
     validar_vacios(47)
     validar_cero(47)
 
