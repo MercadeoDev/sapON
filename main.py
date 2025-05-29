@@ -122,7 +122,7 @@ def configurar_logs(user_name, base_path, secret_path):
 
 def ui():
     import datetime
-    global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar, btn_cargar_lll, ruta_ico
+    global consola, btn_evaluar_lll, files_loaded, pais, campana, ventana, btn_descargar, btn_cargar_lll, ruta_ico, pais_dropdown, campana_dropdown
 
     ventana = tk.Tk()
     ventana.title("Gravitón - Verificador de LLL")
@@ -345,6 +345,8 @@ def reiniciar_gui():
     # Restablecer menús desplegables
     pais.set("País")
     campana.set("Campaña")
+    pais_dropdown.configure(state="active")
+    campana_dropdown.configure(state="active")  
     
     # Limpiar consola
     consola.configure(state="normal")
@@ -406,6 +408,8 @@ def popup(titulo, texto):
 
 def thread_evaluacion():
     #evitar doble clic
+    pais_dropdown.configure(state="disabled")
+    campana_dropdown.configure(state="disabled")  
     btn_cargar_lll.configure(state="disabled")
     btn_evaluar_lll.configure(state="disabled")
     threading.Thread(target=_verificar_con_callback, daemon=True).start()
@@ -417,6 +421,7 @@ def thred_generacion():
 def _generar_con_callback():
     try:
         generar_archivo()
+
     finally:
         ventana.after(0, lambda: btn_descargar.configure(state="normal"))
 
@@ -462,7 +467,15 @@ def verificar_seleccion():
     try:
         df_CAT = leer_lll(selected_file, "LL CAT")    
     except Exception as e:
-        messagebox.showerror("Error en la lectura", f"El archivo cargado no tiene la estructura adecuada.\n{name}, asegurate de usar la versión más reciente del formato de LLL entregado por el Área de Precios y Optimización y de no modificar los nombres y/o formatos de las primeras 71 columnas.")
+        error_type = type(e).__name__
+        print(type(e).__name__)
+        if error_type == 'ValueError':
+            messagebox.showerror("Error de lectura", f"El archivo cargado no corresponde a un LLL válido.\n{name}, por favor, asegúrate de utilizar la plantilla más reciente sin modificaciones, proporcionada por el Área de Precios y Optimización, o carga un archivo LLL correcto.")
+        elif error_type == 'PermissionError':
+            messagebox.showerror("Error en la lectura", f"El archivo cargado se encuentra abierto.\n{name}, por favor, cierralo e intenta de nuevo.")
+        else:
+            messagebox.showerror("Error inesperado", f"Este error corresponde al tipo {error_type} y significa: {e}")
+            
     pais_L5 = df_CAT.iloc[4,11]
     campana_B5 = df_CAT.iloc[4,1]  
 
@@ -472,14 +485,16 @@ def verificar_seleccion():
         messagebox.showerror("Error en selección", "El país o campaña seleccionados no coinciden con el país o campaña del LLL cargado.")
         reiniciar_gui()
 
-def validar_lll():
+def validar_lll(): 
+
     import pandas as pd
     global selected_file, ventana, errores_lll, df_CAT, columnas_lll, campana_B5, pais_L5, nombre_archivo
     
-    #print("País seleccionado: ", pais_seleccionado)
-    #print("Campaña: ", campana_seleccionada)
+    print("País seleccionado: ", pais_seleccionado)
+    print("Campaña: ", campana_seleccionada)
 
-    print("Comenzando validación")        
+    print("Comenzando validación")    
+
 
     #almacen de errores
     errores_lll = []
@@ -596,7 +611,7 @@ def validar_lll():
             usecols=f"{columna_inicial}:{columna_final}", nrows=int(filas)) #indicativo columnas
         
         df_conSQL = df_conSQL.dropna(how='all')
-        #print(df_conSQL)
+        print(df_conSQL)
         return df_conSQL
     
     actualizar_consola("Comenzando el análisis del\nLLL cargado...")   
@@ -622,7 +637,6 @@ def validar_lll():
     #Definición headers
     #print("Archivo cargado")
     headers = df_CAT.iloc[5].fillna("").tolist()
-    uens_detectadas = df_CAT.iloc[fila_inicial:fila_final, 4].unique()
 
     #Si coinciden los headers significa que es un LLL
     if headers[:71] != columnas_lll:
@@ -641,18 +655,8 @@ def validar_lll():
     
     actualizar_consola("Validando filas...")
 
-    #--------------------Validar Tipo de Venta -- CAMBIAR
-
-    uens_especiales = params.get("uens_especiales")
-    print(uens_especiales)
-    print(uens_detectadas)
-    if any(uen in uens_especiales for uen in uens_detectadas):
-        tipos_venta = consumir_conSQL("Y", "Y", 40)
-        print("Sí hay UENs especiales")
-    else:
-        tipos_venta = consumir_conSQL("X", "X", 40)
-        print("No hay UENs especiales")
-
+    #--------------------Validar Tipo de Venta
+    tipos_venta = consumir_conSQL("Y", "Y", 40)
     tipos_venta = tipos_venta['Tipo Venta'].tolist()
     tipos_venta = [int(x) for x in tipos_venta]
     tipos_venta = [str(x) for x in tipos_venta]
@@ -689,13 +693,7 @@ def validar_lll():
     validar_vacios(11)
     
     #--------------------Validar Tipo Programación
-    if any(uen in uens_especiales for uen in uens_detectadas):
-        tipo_prog = consumir_conSQL("BG", "BG", 15)
-        print("Sí hay UENs especiales")
-    else:
-        tipo_prog = consumir_conSQL("BF", "BF", 15)
-        print("No hay UENs especiales")
-        
+    tipo_prog = consumir_conSQL("BG", "BG", 15)        
     tipo_prog = tipo_prog["Tipo_Prog"].tolist()
     validacion_basica(12, tipo_prog)
 
@@ -731,15 +729,12 @@ def validar_lll():
     validar_vacios(23)
 
     #--------------------Validar OBSERVACION PDF
-    if any(uen in uens_especiales for uen in uens_detectadas):
-        valores_pdf = consumir_conSQL("CK", "CK", 15)
-        print("Sí hay UENs especiales")
-    else:
-        valores_pdf = consumir_conSQL("CJ", "CJ", 15)
-        print("No hay UENs especiales")
-
+    valores_pdf = consumir_conSQL("CK", "CK", 15)
     valores_pdf = valores_pdf.iloc[:, 0].tolist()
     validacion_basica(26, valores_pdf)
+
+    #--------------------Validar ULTIMO COSTO EN REPO_COSTO_FUTURO
+    validar_cero(27)
 
     #--------------------Validar COSTO INICIAL
     validar_vacios(29)
@@ -959,13 +954,7 @@ def validar_lll():
     validar_vacios(56)
 
     #--------------------Validar PEDIDOS 
-    if any(uen in uens_especiales for uen in uens_detectadas):
-        pedidos = consumir_conSQL("AL", "AO", 30)
-        print("Sí hay UENs especiales")
-    else:
-        pedidos = consumir_conSQL("AK", "AN", 30)
-        print("No hay UENs especiales")
-
+    pedidos = consumir_conSQL("AL", "AO", 30)
     pedidos['codi_camp'] = pedidos["codi_camp"].astype(int)
     pedidos['tota_pedi'] = pedidos["tota_pedi"].astype(int)
     pedidos = pedidos[pedidos['codi_camp'] == int(campana_seleccionada)]['tota_pedi'].values[0]
@@ -982,6 +971,7 @@ def validar_lll():
     validacion_basica(58, indicador)    
 
     uens_aprobadas = params.get("uens_aprobadas")
+    uens_detectadas = df_CAT.iloc[fila_inicial:fila_final, 4].unique()
     print(uens_detectadas)
     print(uens_aprobadas)
 
@@ -990,13 +980,7 @@ def validar_lll():
         #--------------------Validar GRAMAJE
         validar_vacios(59)
         #--------------------Validar UNIDAD DE MEDIDA
-        if any(uen in uens_especiales for uen in uens_detectadas):
-            unidades_medida = consumir_conSQL("CI", "CI", 50)
-            print("Sí hay UENs especiales")
-        else:
-            unidades_medida = consumir_conSQL("CH", "CH", 50)
-            print("No hay UENs especiales")
-
+        unidades_medida = consumir_conSQL("CI", "CI", 50)
         unidades_medida = unidades_medida.iloc[:, 0].tolist()
         print(unidades_medida)
         validacion_basica(60, unidades_medida)
@@ -1047,6 +1031,8 @@ def validar_lll():
 
     #mensaje éxito
     popup("¡Archivo listo!", f"{name}, el archivo de hallazgos solicitado ya está listo.")
+    pais_dropdown.configure(state="active")
+    campana_dropdown.configure(state="active")  
 
 def construir_resultado(errores, df, campana, pais):
     from openpyxl import Workbook
